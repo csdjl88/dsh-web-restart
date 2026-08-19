@@ -1,0 +1,14 @@
+# dsh-web-restart bundle patch layer.
+#
+# This bundle contributes one host row: the plugin's own package. The loader
+# imports `dsh-web-restart` (resolved from the profile's node_modules after
+# `dsh plugin --profile web add dsh-web-restart`), which runs the host half:
+# the restart controller, the `POST /dsh-restart` + `GET /dsh-restart/health`
+# HTTP routes, and the `dsh_restart` model tool.
+#
+# client-modules independently scans this same loader entry for a package that
+# declares `dsh.client` and exports `./client`, which is how the browser half
+# (the sidebar restart button) is discovered and injected into the boot graph.
+- insert:
+    - id: web-restart
+      name: 'dsh-web-restart'
