@@ -48,7 +48,8 @@ click / tool call
 
 ## Compatibility
 
-- Designed for **running `dsh web` in a foreground terminal** (no supervisor); also works under systemd / Docker / pm2 — the guard takes over relaunching once the old process exits.
+- Designed for **running `dsh web` in a foreground terminal** (no supervisor); the relaunch pipeline is verified against a real `dsh web` instance.
+- ⚠️ **Use with caution under a supervisor that has an auto-restart policy** (systemd / Docker / pm2): when the old process exits, BOTH the supervisor and this plugin's guard may relaunch it, producing two instances racing for the port (one crashes with EADDRINUSE). In a supervised environment, disable the supervisor's restart policy or remove this plugin.
 - Requires DSH `0.1.0-rc.7` or newer.
 
 ## Development
