@@ -35,16 +35,25 @@ dsh plugin --profile web add dsh-web-restart
 ```
 点击按钮 / 调用工具
    └─ POST /dsh-restart（幂等，单飞）
-        └─ spawn 启动守卫（同一 node + 原命令行 + 环境契约）
+        └─ spawn 启动守卫（同一 node + 原命令行 + 自动追加 --no-open）
              └─ 旧进程 1s 后退出
                   └─ 守卫轮询：旧进程退出 & 端口空闲
-                       └─ 以原命令重新拉起 dsh web
-                            └─ GET /dsh-restart/health 应答 → 前端自动刷新
+                       └─ 以原命令（带 --no-open）重新拉起 dsh web（独立会话）
+                            └─ 页面不刷新、不新建标签，DSH 自动重连恢复原会话
 ```
 
-- 守卫进程**不脱离原进程组**：终端 Ctrl+C 仍可正常停止重启后的 DSH，与原来一致
+- **重启命令总是带 `--no-open`**（原命令没有则自动追加）：重启时浏览器已在用户面前，不再自动弹新窗口
+- **页面不整页刷新**：重启期间按钮显示「重启中…」，DSH 客户端 WebSocket 自动重连（`connection/reset`）恢复界面，**回到原会话标签页，不新建标签**
 - HTTP 端点：`POST /dsh-restart`（触发）、`GET /dsh-restart/health`（健康检查，返回 `pid` 供前端识别新进程）
 - 环境契约：`DSH_RESTARTED_BY` / `DSH_RESTART_OLD_PID` / `DSH_RESTART_PORT`
+
+### 如何停止重启后的 DSH（重要）
+
+重启后的 dsh web 运行在**独立会话（进程组）**中。原 dsh 是终端前台进程组的组长，它退出后原进程组变成孤儿组，**无法再接收终端的 Ctrl+C** —— 这是 Unix 进程模型的固有行为，插件无法让重启后的进程恢复 Ctrl+C 停止。请用以下任一方式停止：
+
+- **关闭运行 dsh 的终端窗口**（守卫检测到终端关闭后自动终止 dsh，端口随之释放）—— 最推荐
+- 在终端按 **Ctrl+D**（同样是终端关闭信号）
+- 或在新终端执行 `pkill -f "dsh web"` / `kill <pid>`（`lsof -iTCP:3080` 可查 pid）
 
 ## 兼容性
 

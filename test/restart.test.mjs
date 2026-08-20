@@ -29,17 +29,45 @@ test('requestRestart: spawns the guard with the identical command line', () => {
   assert.equal(record.cmd, process.execPath)
   assert.ok(record.args[0].endsWith('scripts/relaunch.mjs'))
   assert.equal(record.args[1], process.argv[1])
-  assert.deepEqual(record.args.slice(2), process.argv.slice(2))
+  // 原参数全部保留，并总是追加 --no-open（重启后不弹浏览器）。
+  const expectedArgs = process.argv.slice(2).includes('--no-open')
+    ? process.argv.slice(2)
+    : [...process.argv.slice(2), '--no-open']
+  assert.deepEqual(record.args.slice(2), expectedArgs)
   assert.ok(record.args.length >= 2) // relaunch + dsh 入口（其余参数按运行环境而定）
   // 环境契约。
   assert.equal(record.options.env.DSH_RESTARTED_BY, 'dsh-web-restart')
   assert.equal(record.options.env.DSH_RESTART_OLD_PID, String(process.pid))
   assert.equal(record.options.env.DSH_RESTART_PORT, '3080')
-  // stdio 继承、不脱离进程组（保持 Ctrl+C 心智）。
+  // guard 继承 stdio（日志可达终端）。
   assert.deepEqual(record.options.stdio, 'inherit')
   // 旧进程在宽限期后退出。
   assert.equal(exits.length, 0)
   assert.ok(DEFAULT_GRACE_MS > 0)
+})
+
+test('requestRestart: appends --no-open only when the original command lacks it', () => {
+  const record = {}
+  const restarter = createRestarter({
+    spawnImpl: fakeSpawn(record),
+    exitImpl: () => {},
+    argv: ['node', '/path/dsh', 'web', '--no-open'],
+  })
+  restarter.requestRestart({})
+  // 原命令已带 --no-open → 不重复追加。
+  assert.equal(record.args.filter((a) => a === '--no-open').length, 1)
+  assert.deepEqual(record.args.slice(2), ['web', '--no-open'])
+})
+
+test('requestRestart: appends --no-open when the original command lacks it', () => {
+  const record = {}
+  const restarter = createRestarter({
+    spawnImpl: fakeSpawn(record),
+    exitImpl: () => {},
+    argv: ['node', '/path/dsh', 'web', '--port', '3199'],
+  })
+  restarter.requestRestart({})
+  assert.deepEqual(record.args.slice(2), ['web', '--port', '3199', '--no-open'])
 })
 
 test('requestRestart: is single-flight (second call rejected)', () => {

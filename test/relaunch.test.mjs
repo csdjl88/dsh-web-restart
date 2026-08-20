@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { spawn } from 'node:child_process'
+import { execSync, spawn } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
@@ -84,6 +84,7 @@ async function waitForNewPid(port, oldPid) {
 test('e2e: POST /restart replaces the process with an identical relaunch', { timeout: 60000 }, async () => {
   const port = await pickFreePort()
   const first = startFake('A', port)
+  let freshPid = 0
   try {
     await readReady(first)
     const oldPid = first.pid
@@ -109,18 +110,28 @@ test('e2e: POST /restart replaces the process with an identical relaunch', { tim
     assert.notEqual(fresh.pid, oldPid)
     assert.equal(fresh.ok, true)
 
+    // The fresh process must own its own process group (the guard spawns it
+    // detached). The old harness was the terminal foreground process-group
+    // leader; once it dies that group becomes orphaned and no longer receives
+    // terminal signals, so the relaunched harness must not stay inside it —
+    // detached gives it a deterministic, independent session (pgid == pid is
+    // the portable marker; macOS `ps` has no `sid` keyword).
+    const pgid = Number(execSync(`ps -o pgid= -p ${fresh.pid}`).toString().trim())
+    assert.equal(pgid, fresh.pid, 'fresh process should be its own process-group leader')
+
     // Cleanup: stop the fresh instance.
-    const freshPid = fresh.pid
+    freshPid = fresh.pid
     try {
       process.kill(freshPid, 'SIGTERM')
     } catch {
       // already gone
     }
   } finally {
-    try {
-      process.kill(first.pid, 'SIGKILL')
-    } catch {
-      // already gone
+    // Clean up both instances (a failed assertion above must not leak the
+    // fresh process — an unclosed stdio pipe would hang the test runner).
+    for (const pid of [first.pid, freshPid]) {
+      if (!pid) continue
+      try { process.kill(pid, 'SIGKILL') } catch { /* already gone */ }
     }
   }
 })

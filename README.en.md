@@ -7,9 +7,9 @@ DSH web plugin: **one-click full restart of the harness from the sidebar** — t
 ## Features
 
 - 🔘 **Sidebar restart button** in the `sidebar.footer.action` row (beside the Cordis lifecycle panel). Click = restart, no confirmation dialog (single-user, trusted-host model).
-- ♻️ **Full process restart**: terminates the current `dsh web` process and relaunches the **exact same command line** (preserving `--profile` / `--patch` and all inner flags).
+- ♻️ **Full process restart**: terminates the current `dsh web` process and relaunches the same command line (preserving `--profile` / `--patch` and all inner flags, always ensuring `--no-open` so no browser window is popped).
 - 🛡️ **Startup guard (no daemon needed)**: the fresh process is launched only after the old process has exited AND the web port is free, eliminating the port-races that would otherwise crash boot (DSH's webserver binds on startup and has no EADDRINUSE retry).
-- 🔄 **Automatic page recovery**: while restarting, the button shows "Restarting…" and polls the health endpoint; once the fresh process answers, the page reloads back into the current session (the session survives via DSH persistence).
+- 🔄 **No page reload, no new tab**: while restarting, the button shows "Restarting…" and polls the health endpoint; the page stays put and DSH's WebSocket auto-reconnect (`connection/reset`) restores the UI **in the same session tab** (the session survives via DSH persistence).
 - 🧰 **Agent-callable tool** `dsh_restart` sharing the same restart core.
 - 🌐 Bilingual (zh/en) UI copy and README.
 - 🚫 Single-flight guard: duplicate clicks/tool calls while a restart is in flight are rejected.
@@ -25,7 +25,7 @@ Restart DSH for the button to appear in the sidebar footer.
 ## Usage
 
 ### Web button
-Click "Restart DSH" at the bottom of the sidebar. The button shows "Restarting…" and polls automatically; the page reloads once the fresh process is ready. If it is not ready within 30 seconds, an error is shown (check the terminal running dsh).
+Click "Restart DSH" at the bottom of the sidebar. The button shows "Restarting…" and polls automatically; the page does **not** reload — DSH's WebSocket auto-reconnect restores the UI in the same session tab (no new tab). If the fresh process is not ready within 30 seconds, an error is shown (check the terminal running dsh).
 
 ### Agent tool
 Just ask "restart DSH" in a conversation (tool `dsh_restart`, optional `reason` argument). Note: a restart **interrupts all running agent tasks and background jobs**.
@@ -35,16 +35,25 @@ Just ask "restart DSH" in a conversation (tool `dsh_restart`, optional `reason` 
 ```
 click / tool call
    └─ POST /dsh-restart (idempotent, single-flight)
-        └─ spawn the relaunch guard (same node + original argv + env contract)
+        └─ spawn the relaunch guard (same node + original argv + auto `--no-open`)
              └─ old process exits after ~1s
                   └─ guard polls: old pid gone & port free
-                       └─ relaunch `dsh web` with the identical command
-                            └─ GET /dsh-restart/health answers → page auto-reloads
+                       └─ relaunch `dsh web` (with `--no-open`) in its own session
+                            └─ no reload, no new tab — DSH auto-reconnects to the same session tab
 ```
 
-- The guard stays in the original process group: Ctrl+C on the terminal keeps working as before.
+- **The relaunch command always carries `--no-open`** (appended when the original command lacks it): the browser is already in front of the user, so no new window is popped.
+- **No full-page reload**: DSH's WebSocket auto-reconnect (`connection/reset`) restores the UI in the original session tab.
 - HTTP endpoints: `POST /dsh-restart` (trigger), `GET /dsh-restart/health` (liveness; returns `pid` so the front end can recognise the fresh process).
 - Env contract: `DSH_RESTARTED_BY` / `DSH_RESTART_OLD_PID` / `DSH_RESTART_PORT`.
+
+### Stopping a restarted DSH (important)
+
+After a restart the fresh `dsh web` runs in its **own session (process group)**. The original dsh was the terminal's foreground process-group leader; once it dies the old group becomes orphaned and **no longer receives the terminal's Ctrl+C** — this is inherent to the Unix process model and cannot be fixed by the plugin. Stop the restarted harness with any of:
+
+- **Close the terminal window running dsh** (the guard detects the terminal closing and terminates the harness; the port is released) — recommended.
+- Press **Ctrl+D** in the terminal (also a terminal-close signal).
+- Or, in a new terminal: `pkill -f "dsh web"` / `kill <pid>` (`lsof -iTCP:3080` to find the pid).
 
 ## Compatibility
 
