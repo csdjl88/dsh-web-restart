@@ -137,4 +137,11 @@ test('client bundle: conforms to the ModuleLoader static-bundle shape', () => {
   // 并排均分 CSS 规则必须存在（访谈确认的共存方案）。
   assert.match(source, /_footerActions/)
   assert.match(source, /flex: 1 1 0 !important/)
+  // 重启后回到原会话 tab（不新开标签）：会话 id 存 sessionStorage，刷新后 sessions.open 切回。
+  assert.match(source, /SESSION_KEY/)
+  assert.match(source, /sessionStorage\.setItem/)
+  assert.match(source, /sessionStorage\.getItem/)
+  assert.match(source, /sessionStorage\.removeItem/)
+  assert.match(source, /ctx\.sessions\.open\(savedId\)/)
+  assert.match(source, /var inject = \['slots', 'locale', 'sessions'\]/)
 })
