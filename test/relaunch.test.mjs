@@ -133,7 +133,11 @@ test('client bundle: conforms to the ModuleLoader static-bundle shape', () => {
   assert.match(source, /exports\.inject = inject/)
   assert.match(source, /exports\.apply = apply/)
   assert.match(source, /sidebar\.footer\.action/)
-  assert.match(source, /location\.reload\(\)/)
+  // 重启后不再整页刷新（reload 会新建会话标签），改为保持页面、靠 DSH 自动重连恢复。
+  assert.doesNotMatch(source, /location\.reload\(\)/)
+  assert.match(source, /connection\/reset/)
+  assert.match(source, /hostDescription/)
+  assert.match(source, /waitForReconnect/)
   // 并排均分 CSS 规则必须存在（访谈确认的共存方案）。
   assert.match(source, /_footerActions/)
   assert.match(source, /flex: 1 1 0 !important/)
@@ -143,5 +147,5 @@ test('client bundle: conforms to the ModuleLoader static-bundle shape', () => {
   assert.match(source, /sessionStorage\.getItem/)
   assert.match(source, /sessionStorage\.removeItem/)
   assert.match(source, /ctx\.sessions\.open\(savedId\)/)
-  assert.match(source, /var inject = \['slots', 'locale', 'sessions'\]/)
+  assert.match(source, /var inject = \['slots', 'locale', 'sessions', 'connection'\]/)
 })
