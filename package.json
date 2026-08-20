@@ -8,9 +8,9 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/omdsh-dev/dsh-web-restart.git"
+    "url": "git+https://github.com/csdjl88/dsh-web-restart.git"
   },
-  "homepage": "https://github.com/omdsh-dev/dsh-web-restart",
+  "homepage": "https://github.com/csdjl88/dsh-web-restart",
   "main": "lib/index.js",
   "exports": {
     ".": "./lib/index.js",
