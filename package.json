@@ -1,6 +1,6 @@
 {
   "name": "dsh-web-restart",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "DSH web plugin: one-click full process restart of the harness from the sidebar — terminates the current `dsh web` process and relaunches the identical command via a startup guard (no daemon required), with automatic page recovery and an agent-callable restart tool. DSH Web 插件：侧边栏一键完整重启 harness —— 结束当前 `dsh web` 进程并以相同命令经启动守卫重新拉起（无需守护进程），页面自动恢复，并提供 agent 可调用工具。",
   "type": "module",
   "publishConfig": {
