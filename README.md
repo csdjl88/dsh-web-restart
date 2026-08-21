@@ -1,73 +1,75 @@
 # dsh-web-restart
 
-DSH Web 插件：**侧边栏一键完整重启 DSH** —— 点击按钮后结束当前 `dsh web` 进程，并以完全相同命令经启动守卫重新拉起（无需 systemd/Docker 等守护进程），页面自动恢复，同时提供 agent 可调用工具。
+English | [中文](README.zh.md)
 
-> npm 包名 `dsh-restart` 已被同名项目占用，本插件定名 **`dsh-web-restart`**。
+DSH web plugin: **one-click full restart of the harness from the sidebar** — terminates the current `dsh web` process and relaunches the identical command through a startup guard (no systemd/Docker supervisor required), with automatic page recovery and an agent-callable restart tool.
 
-## 功能特性
+> The npm name `dsh-restart` is already taken by a same-purpose project, so this plugin ships as **`dsh-web-restart`**.
 
-- 🔘 **侧边栏底部重启按钮**：位于 `sidebar.footer.action` 操作区（Cordis 生命周期面板旁），点击即重启，无确认弹窗（本机信任模型）
-- ♻️ **完整进程重启**：结束当前 `dsh web` 进程，以**完全相同的命令行**重新拉起（保留 `--profile` / `--patch` 及所有内层参数）
-- 🛡️ **启动守卫（无守护进程）**：新进程由守卫在「旧进程已退出 + 端口已释放」后才启动，彻底避免端口占用竞态（DSH 的 webserver 启动即监听且无重试）
-- 🔄 **页面自动恢复**：重启期间按钮显示「重启中…」，轮询健康检查，新进程就绪后自动刷新回到当前会话（会话由 DSH 持久化保留）
-- 🧰 **agent 可调用工具**：`dsh_restart` 工具与按钮共用同一重启逻辑，可在对话中直接触发
-- 🌐 中英双语 UI 文案与 README
-- 🚫 幂等保护：重启在途时重复点击/调用会被拒绝
+## Features
 
-## 安装
+- 🔘 **Sidebar restart button** in the `sidebar.footer.action` row (beside the Cordis lifecycle panel). Click = restart, no confirmation dialog (single-user, trusted-host model).
+- ♻️ **Full process restart**: terminates the current `dsh web` process and relaunches the same command line (preserving `--profile` / `--patch` and all inner flags, always ensuring `--no-open` so no browser window is popped).
+- 🛡️ **Startup guard (no daemon needed)**: the fresh process is launched only after the old process has exited AND the web port is free, eliminating the port-races that would otherwise crash boot (DSH's webserver binds on startup and has no EADDRINUSE retry).
+- 🔄 **No page reload, no new tab**: while restarting, the button shows "Restarting…" and polls the health endpoint; the page stays put and DSH's WebSocket auto-reconnect (`connection/reset`) restores the UI **in the same session tab** (the session survives via DSH persistence).
+- 🧰 **Agent-callable tool** `dsh_restart` sharing the same restart core.
+- 🌐 Bilingual (zh/en) UI copy and README.
+- 🚫 Single-flight guard: duplicate clicks/tool calls while a restart is in flight are rejected.
 
-```bash
-dsh plugin --profile web add dsh-web-restart
-```
-
-重启 DSH 后生效（侧边栏底部出现按钮）。
-
-## 使用
-
-### Web 按钮
-侧边栏底部点击「重启 DSH」即可。按钮变「重启中…」并自动轮询；新进程就绪后页面自动刷新回到当前会话。若 30 秒内未就绪，会显示错误提示（请查看运行 dsh 的终端日志）。
-
-### Agent 工具
-在对话中要求「重启一下 DSH」即可（工具名 `dsh_restart`，可选参数 `reason`）。注意：重启会**中断所有正在运行的 agent 任务与后台作业**。
-
-## 工作原理
-
-```
-点击按钮 / 调用工具
-   └─ POST /dsh-restart（幂等，单飞）
-        └─ spawn 启动守卫（同一 node + 原命令行 + 自动追加 --no-open）
-             └─ 旧进程 1s 后退出
-                  └─ 守卫轮询：旧进程退出 & 端口空闲
-                       └─ 以原命令（带 --no-open）重新拉起 dsh web（独立会话）
-                            └─ 页面不刷新、不新建标签，DSH 自动重连恢复原会话
-```
-
-- **重启命令总是带 `--no-open`**（原命令没有则自动追加）：重启时浏览器已在用户面前，不再自动弹新窗口
-- **页面不整页刷新**：重启期间按钮显示「重启中…」，DSH 客户端 WebSocket 自动重连（`connection/reset`）恢复界面，**回到原会话标签页，不新建标签**
-- HTTP 端点：`POST /dsh-restart`（触发）、`GET /dsh-restart/health`（健康检查，返回 `pid` 供前端识别新进程）
-- 环境契约：`DSH_RESTARTED_BY` / `DSH_RESTART_OLD_PID` / `DSH_RESTART_PORT`
-
-### 如何停止重启后的 DSH（重要）
-
-重启后的 dsh web 运行在**独立会话（进程组）**中。原 dsh 是终端前台进程组的组长，它退出后原进程组变成孤儿组，**无法再接收终端的 Ctrl+C** —— 这是 Unix 进程模型的固有行为，插件无法让重启后的进程恢复 Ctrl+C 停止。请用以下任一方式停止：
-
-- **关闭运行 dsh 的终端窗口**（守卫检测到终端关闭后自动终止 dsh，端口随之释放）—— 最推荐
-- 在终端按 **Ctrl+D**（同样是终端关闭信号）
-- 或在新终端执行 `pkill -f "dsh web"` / `kill <pid>`（`lsof -iTCP:3080` 可查 pid）
-
-## 兼容性
-
-- 本插件面向**终端前台运行 `dsh web`**（无外部守护）的场景设计，重启链路已通过真实 dsh web 实例验证
-- ⚠️ **在 systemd / Docker / pm2 等带自动重启策略的守护环境下慎用**：旧进程退出会同时触发「外部守护拉起」与「本插件启动守卫拉起」，产生两个实例争抢端口（一个 EADDRINUSE 崩溃）。守护环境下应关闭守护的重启策略，或移除本插件
-- 需要 DSH `0.1.0-rc.7` 及以上
-
-## 开发
+## Install
 
 ```bash
-npm run check   # 语法检查
-npm test        # 单元测试 + 进程级 e2e（真实验证重启链路）
+dsh plugin --profile web add github:csdjl88/dsh-web-restart
 ```
 
-## 许可证
+Restart DSH for the button to appear in the sidebar footer.
+
+## Usage
+
+### Web button
+Click "Restart DSH" at the bottom of the sidebar. The button shows "Restarting…" and polls automatically; the page does **not** reload — DSH's WebSocket auto-reconnect restores the UI in the same session tab (no new tab). If the fresh process is not ready within 30 seconds, an error is shown (check the terminal running dsh).
+
+### Agent tool
+Just ask "restart DSH" in a conversation (tool `dsh_restart`, optional `reason` argument). Note: a restart **interrupts all running agent tasks and background jobs**.
+
+## How it works
+
+```
+click / tool call
+   └─ POST /dsh-restart (idempotent, single-flight)
+        └─ spawn the relaunch guard (same node + original argv + auto `--no-open`)
+             └─ old process exits after ~1s
+                  └─ guard polls: old pid gone & port free
+                       └─ relaunch `dsh web` (with `--no-open`) in its own session
+                            └─ no reload, no new tab — DSH auto-reconnects to the same session tab
+```
+
+- **The relaunch command always carries `--no-open`** (appended when the original command lacks it): the browser is already in front of the user, so no new window is popped.
+- **No full-page reload**: DSH's WebSocket auto-reconnect (`connection/reset`) restores the UI in the original session tab.
+- HTTP endpoints: `POST /dsh-restart` (trigger), `GET /dsh-restart/health` (liveness; returns `pid` so the front end can recognise the fresh process).
+- Env contract: `DSH_RESTARTED_BY` / `DSH_RESTART_OLD_PID` / `DSH_RESTART_PORT`.
+
+### Stopping a restarted DSH (important)
+
+After a restart the fresh `dsh web` runs in its **own session (process group)**. The original dsh was the terminal's foreground process-group leader; once it dies the old group becomes orphaned and **no longer receives the terminal's Ctrl+C** — this is inherent to the Unix process model and cannot be fixed by the plugin. Stop the restarted harness with any of:
+
+- **Close the terminal window running dsh** (the guard detects the terminal closing and terminates the harness; the port is released) — recommended.
+- Press **Ctrl+D** in the terminal (also a terminal-close signal).
+- Or, in a new terminal: `pkill -f "dsh web"` / `kill <pid>` (`lsof -iTCP:3080` to find the pid).
+
+## Compatibility
+
+- Designed for **running `dsh web` in a foreground terminal** (no supervisor); the relaunch pipeline is verified against a real `dsh web` instance.
+- ⚠️ **Use with caution under a supervisor that has an auto-restart policy** (systemd / Docker / pm2): when the old process exits, BOTH the supervisor and this plugin's guard may relaunch it, producing two instances racing for the port (one crashes with EADDRINUSE). In a supervised environment, disable the supervisor's restart policy or remove this plugin.
+- Requires DSH `0.1.0-rc.7` or newer.
+
+## Development
+
+```bash
+npm run check   # syntax checks
+npm test        # unit tests + process-level e2e (real restart pipeline)
+```
+
+## License
 
 MIT
